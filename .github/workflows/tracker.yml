@@ -1,0 +1,36 @@
+name: Supermarket Tracker Sync
+
+on:
+  schedule:
+    - cron: '0 20 * * 2' # Wednesday 6:00 AM AEST (20:00 UTC Tuesday)
+  workflow_dispatch:
+
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v4
+
+    - name: Configure Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Handle Dependency Build
+      run: |
+        pip install requests pandas
+
+    - name: Process Analytics Database Update
+      run: |
+        # Initialize the database if it doesn't exist yet, then run the scraper
+        python init_db.py
+        python tracker.py
+
+    - name: Commit and Push Persistent SQLite State Changes
+      run: |
+        git config --global user.name "OptimizerBot"
+        git config --global user.email "bot@optimizer.internal"
+        git add history.db
+        git commit -m "Synchronize live pricing analytics state logs [skip ci]" || exit 0
+        git push
