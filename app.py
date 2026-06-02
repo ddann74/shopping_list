@@ -2,7 +2,30 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 
+def ensure_database_is_healthy():
+    """Ensures the database file and required tables exist before running queries."""
+    conn = sqlite3.connect("history.db")
+    cursor = conn.cursor()
+    # Self-heal step: Create the table structure if it is missing on the server
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS price_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        store TEXT,
+        product_id TEXT,
+        product_name TEXT,
+        current_price REAL,
+        is_special INTEGER,
+        normal_retail_price REAL
+    )
+    """)
+    conn.commit()
+    conn.close()
+
 def get_optimized_metrics(search_term):
+    # Call our health-check guard before hitting the database
+    ensure_database_is_healthy()
+    
     conn = sqlite3.connect("history.db")
     
     # Query history logs to discover true baselines and matching line items
@@ -18,7 +41,7 @@ def get_optimized_metrics(search_term):
     conn.close()
     return df
 
-st.set_page_index = "Grocery Optimizer"
+st.set_page_config(page_title="Grocery Optimizer")
 st.title("🛒 Grocery List Rarity & Route Optimizer")
 st.markdown("Enter your custom grocery list lines below to isolate optimized pricing routing alternatives.")
 
@@ -38,7 +61,6 @@ if list_items:
         
         if not metrics_df.empty:
             for idx, row in metrics_df.iterrows():
-                # Assign dynamic custom rarity ratings similar to Szumark logic
                 current = row['current_price']
                 floor = row['historic_floor']
                 avg = row['historic_average']
@@ -46,6 +68,7 @@ if list_items:
                 
                 savings_pct = ((srp - current) / srp * 100) if srp > 0 else 0
                 
+                # Assign dynamic custom rarity ratings similar to Szumark logic
                 if current <= floor and row['is_special'] == 1:
                     rarity = "🔴 RRR (Historical Low)"
                 elif current < avg and row['is_special'] == 1:
@@ -81,4 +104,4 @@ if list_items:
                 best_option = sub.sort_values(by="RawPrice").iloc[0]
                 st.info(f"For **{search_key}** -> Buy **{best_option['Exact Match Name']}** at **{best_option['Store']}** for **{best_option['Current Price']}** (Status: {best_option['Rarity Class']})")
     else:
-        st.warning("No records matched those query keywords inside your current history database tracker.")
+        st.warning("Your database is initialized but currently empty. Run your GitHub Actions tracking script manually to pull this week's live catalogue prices!")
